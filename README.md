@@ -1,6 +1,12 @@
 # Autonomous Business Document Agent
 
-[![License](https://img.shields.io/github/license/R-Jashwanth/llm-document-pipeline)](https://github.com/R-Jashwanth/llm-document-pipeline/blob/main/LICENSE) [![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python)](https://www.python.org/) [![Build Status](https://img.shields.io/github/actions/workflow/status/R-Jashwanth/llm-document-pipeline/ci.yml?branch=main)](https://github.com/R-Jashwanth/llm-document-pipeline/actions) [![Coverage](https://img.shields.io/codecov/c/gh/R-Jashwanth/llm-document-pipeline)](https://app.codecov.io/gh/R-Jashwanth/llm-document-pipeline) [![PyPI](https://img.shields.io/pypi/v/llm-document-pipeline)](https://pypi.org/project/llm-document-pipeline)
+[![License](https://img.shields.io/github/license/R-Jashwanth/llm-document-pipeline)](https://github.com/R-Jashwanth/llm-document-pipeline/blob/main/LICENSE) 
+[![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/fastapi-0.100+-00a393?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Groq](https://img.shields.io/badge/groq-llama--3.3--70b-FF6B35?logo=groq&logoColor=white)](https://console.groq.com/)
+[![Google Gemini](https://img.shields.io/badge/gemini-2.0--flash-4285F4?logo=google&logoColor=white)](https://aistudio.google.com/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Status: Active](https://img.shields.io/badge/status-active-success)](https://github.com/R-Jashwanth/llm-document-pipeline)
 
 A production-grade **Autonomous AI Agent** built with Python 3.11+, FastAPI, and a multi-provider LLM backend (Groq primary, Google Gemini fallback). The agent accepts a natural language request, a[...]
 
@@ -9,40 +15,40 @@ A production-grade **Autonomous AI Agent** built with Python 3.11+, FastAPI, and
 ## Architecture Diagram & Data Flow
 
 ```
-                      +-----------------------------+
-                      |      FastAPI Gateway        |
-                      |          (app.py)           |
-                      +--------------+--------------+
-                                     |
-                                     v
-                      +-----------------------------+
-                      |      Agent Orchestrator     |
-                      |          (agent.py)         |
-                      +-------+--------------+------+
-                              |              ^
-                              v              |
-                      +-------+------+  +----+------+
-                      |Planner Agent |  |Reflection |
-                      | (planner.py) |  | (self-chk)|
-                      +--------------+  +----+------+
-                                             ^
-                                             |
-                      +----------------------+------+
-                      |      Executor Engine        |
-                      |  (utilizes Tool Registry)   |
-                      +--------------+--------------+
-                                     |
-                                     v
-                      +-----------------------------+
-                      | Document Content Generator  |
-                      |   (document_generator.py)   |
-                      +--------------+--------------+
-                                     |
-                                     v
-                      +-----------------------------+
-                      |       DOCX Generator        |
-                      |    (docx_generator.py)      |
-                      +--------------+--------------+
+                       +-----------------------------+
+                       |      FastAPI Gateway        |
+                       |          (app.py)           |
+                       +--------------+--------------+
+                                      |
+                                      v
+                       +-----------------------------+
+                       |      Agent Orchestrator     |
+                       |          (agent.py)         |
+                       +-------+--------------+------+
+                               |              ^
+                               v              |
+                       +-------+------+  +----+------+
+                       |Planner Agent |  |Reflection |
+                       | (planner.py) |  | (self-chk)|
+                       +--------------+  +----+------+
+                                              ^
+                                              |
+                       +----------------------+------+
+                       |      Executor Engine        |
+                       |  (utilizes Tool Registry)   |
+                       +--------------+--------------+
+                                      |
+                                      v
+                       +-----------------------------+
+                       | Document Content Generator  |
+                       |   (document_generator.py)   |
+                       +--------------+--------------+
+                                      |
+                                      v
+                       +-----------------------------+
+                       |       DOCX Generator        |
+                       |    (docx_generator.py)      |
+                       +--------------+--------------+
 ```
 
 ### Decoupled Data Flow
@@ -216,11 +222,11 @@ The application is structured to decouple presentation (`app.py`), orchestration
 * **Solution**: Implemented a multi-provider LLM client in `llm.py` — Groq (`llama-3.3-70b-versatile`) is the primary provider with automatic fallback to `llama-3.1-8b-instant` (separate quota)[...]
 ### 4. Engineering Trade-off: Autonomous Planning vs. Deterministic Workflows
 * **Autonomous Planning**:
-  * *Pros*: Handles open-ended and complex goals; dynamically adapts plan lengths and content headings; classifications adjust according to user intents.
-  * *Cons*: Higher latency; risk of classification drift; validation is harder due to non-deterministic task outputs.
+   * *Pros*: Handles open-ended and complex goals; dynamically adapts plan lengths and content headings; classifications adjust according to user intents.
+   * *Cons*: Higher latency; risk of classification drift; validation is harder due to non-deterministic task outputs.
 * **Deterministic Workflows**:
-  * *Pros*: High reliability; fixed pricing/tokens; simpler validation; execution is highly reproducible.
-  * *Cons*: Rigid structure; unable to adapt if the user submits unique requests or asks for unrelated layouts.
+   * *Pros*: High reliability; fixed pricing/tokens; simpler validation; execution is highly reproducible.
+   * *Cons*: Rigid structure; unable to adapt if the user submits unique requests or asks for unrelated layouts.
 * *Our Hybrid Approach*: We use **Autonomous Planning** to structure the task list, but enforce a **Deterministic Executor Engine** with strict schema boundaries (`models.py`) and a strict `Tool [...]
 
 ### 5. Future System Scalability Improvements
