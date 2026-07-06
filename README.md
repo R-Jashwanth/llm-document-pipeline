@@ -89,7 +89,10 @@ agent-assignment/
 ## Installation & Setup
 
 1. **Clone or Navigate to the Directory**:
-   Ensure you are in the project root directory.
+   ```bash
+   git clone https://github.com/R-Jashwanth/llm-document-pipeline.git
+   cd llm-document-pipeline
+   ```
 
 2. **Create and Activate a Virtual Environment** (Optional but Recommended):
    ```bash
