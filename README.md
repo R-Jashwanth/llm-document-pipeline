@@ -1,6 +1,6 @@
 # Autonomous Business Document Agent
 
-[![License](https://img.shields.io/github/license/R-Jashwanth/llm-document-pipeline)](https://github.com/R-Jashwanth/llm-document-pipeline/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/R-Jashwanth/llm-document-pipeline)](https://github.com/R-Jashwanth/llm-document-pipeline/blob/main/LICENSE) [![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python)](https://www.python.org/) [![Build Status](https://img.shields.io/github/actions/workflow/status/R-Jashwanth/llm-document-pipeline/ci.yml?branch=main)](https://github.com/R-Jashwanth/llm-document-pipeline/actions) [![Coverage](https://img.shields.io/codecov/c/gh/R-Jashwanth/llm-document-pipeline)](https://app.codecov.io/gh/R-Jashwanth/llm-document-pipeline) [![PyPI](https://img.shields.io/pypi/v/llm-document-pipeline)](https://pypi.org/project/llm-document-pipeline)
 
 A production-grade **Autonomous AI Agent** built with Python 3.11+, FastAPI, and a multi-provider LLM backend (Groq primary, Google Gemini fallback). The agent accepts a natural language request, a[...]
 
