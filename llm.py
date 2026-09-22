@@ -52,8 +52,10 @@ def _groq_generate(
     prompt: str,
     system_prompt: Optional[str],
     response_format: str,
+    max_tokens: int = 4096,
 ) -> str:
-    """Call Groq API. Tries llama-3.3-70b-versatile first, falls back to llama-3.1-8b-instant."""
+    """Call Groq API. Tries GPT OSS 120B first, falls back to GPT OSS 20B."""
+
     try:
         from groq import Groq
     except ImportError as e:
@@ -64,10 +66,10 @@ def _groq_generate(
 
     client = Groq(api_key=settings.groq_api_key)
 
-    # Model priority: 70b for quality, 8b as fallback when 70b quota exhausted
+    # Model priority: 120B for quality, 20B as fallback for speed/reliability
     models_to_try = [
-        ("llama-3.3-70b-versatile", 4096),
-        ("llama-3.1-8b-instant", 2048),
+        ("openai/gpt-oss-120b", 12000),
+        ("openai/gpt-oss-20b", 12000),
     ]
 
     last_error = None

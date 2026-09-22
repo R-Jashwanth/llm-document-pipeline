@@ -1,23 +1,34 @@
 """
 Microsoft Word (.docx) Document Generator Module.
 
-This module converts Markdown text (produced by the generation and reflection modules)
-into a structured, professional Microsoft Word document using the python-docx SDK.
+Converts Markdown content produced by the autonomous document agent into
+a professionally formatted Microsoft Word document using python-docx.
 
-Design Decisions:
-1. AST-style Parsing State Machine: Scans the markdown text line-by-line, parsing
-   hierarchical headers, lists, and formatting tables dynamically.
-2. Inline Formatting: Parses basic markdown bold (`**text**`) and italic (`*text*`) tags
-   and applies them as styled Runs in python-docx paragraphs.
-3. Tabular Layouts: Recognizes markdown pipe tables (`| Col1 | Col2 |`), strips divider
-   rows, normalizes column counts, and maps them to a formatted Word table using 'Table Grid'.
+Supported Markdown:
+- # Heading
+- ## Heading
+- ### Heading
+- bullet lists
+- numbered lists
+- Markdown tables
+- **bold**
+- *italic*
+
+The generator is intentionally deterministic: the LLM produces content,
+while this module is responsible for presentation and document formatting.
 """
 
 import re
 from pathlib import Path
+from typing import Optional
+
 from docx import Document
+from docx.enum.section import WD_SECTION
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt
 
 from config import settings
 from utils import DocxException, logger
@@ -25,187 +36,659 @@ from utils import DocxException, logger
 
 class DocxGenerator:
     """
-    DocxGenerator handles parsing markdown structures and compiling them into
-    well-formatted MS Word documents saved in the output directory.
+    Converts structured Markdown into a professional .docx document.
     """
 
     def create_docx(self, markdown_content: str, filename: str) -> Path:
         """
-        Parses a markdown string and writes it to a styled Word Document.
+        Convert Markdown content into a Word document.
 
         Args:
-            markdown_content: The full markdown text to convert.
-            filename: The target filename (e.g. 'project_proposal.docx').
+            markdown_content: Complete Markdown document.
+            filename: Output filename.
 
         Returns:
-            The Path where the generated document was saved.
+            Path to the generated DOCX file.
 
         Raises:
-            DocxException: If writing or saving the file fails.
+            DocxException: If document creation or saving fails.
         """
-        logger.info(f"Starting DOCX compiler for filename: '{filename}'")
-        doc = Document()
 
-        # Define default typography style (11pt Calibri)
-        normal_style = doc.styles["Normal"]
-        font = normal_style.font
-        font.name = "Calibri"
-        font.size = Pt(11)
+        logger.info(
+            f"Starting DOCX compiler for filename: '{filename}'"
+        )
 
-        lines = markdown_content.splitlines()
-        num_lines = len(lines)
-        i = 0
+        if not markdown_content or not markdown_content.strip():
+            raise DocxException(
+                "Cannot create DOCX: Markdown content is empty."
+            )
 
         try:
-            while i < num_lines:
-                line = lines[i].strip()
+            doc = Document()
 
-                # Skip empty lines
-                if not line:
-                    i += 1
-                    continue
+            self._configure_document(doc)
+            self._configure_styles(doc)
+            self._add_header_footer(doc)
 
-                # 1. Handle Headings (#, ##, ###)
-                if line.startswith("#"):
-                    level = 0
-                    while level < len(line) and line[level] == "#":
-                        level += 1
+            self._parse_markdown(
+                doc,
+                markdown_content,
+            )
 
-                    heading_text = line[level:].strip()
-
-                    # Restrict level to a max of 3 for styling consistency
-                    heading_level = min(level, 3)
-
-                    # Add heading and configure alignment
-                    h = doc.add_heading(heading_text, level=heading_level)
-                    if heading_level == 1:
-                        h.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    i += 1
-                    continue
-
-                # 2. Handle Tables (| Col1 | Col2 |)
-                if line.startswith("|"):
-                    table_lines = []
-                    while i < num_lines and lines[i].strip().startswith("|"):
-                        table_lines.append(lines[i].strip())
-                        i += 1
-                    self._add_table_to_doc(doc, table_lines)
-                    continue
-
-                # 3. Handle Bullet Lists (- item or * item)
-                if line.startswith("- ") or line.startswith("* "):
-                    list_text = line[2:].strip()
-                    p = doc.add_paragraph(style="List Bullet")
-                    self._add_formatted_text(p, list_text)
-                    i += 1
-                    continue
-
-                # 4. Handle Numbered Lists (1. item)
-                num_list_match = re.match(r"^\d+\.\s+(.*)", line)
-                if num_list_match:
-                    list_text = num_list_match.group(1).strip()
-                    p = doc.add_paragraph(style="List Number")
-                    self._add_formatted_text(p, list_text)
-                    i += 1
-                    continue
-
-                # 5. Handle Regular Paragraphs
-                p = doc.add_paragraph()
-                self._add_formatted_text(p, line)
-                i += 1
-
-            # Resolve full target save path
             output_path = settings.generated_dir / filename
+
+            output_path.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
             doc.save(str(output_path))
-            logger.info(f"DOCX document successfully written to: '{output_path}'")
+
+            logger.info(
+                f"DOCX document successfully written to: "
+                f"'{output_path}'"
+            )
+
             return output_path
 
+        except DocxException:
+            raise
+
         except Exception as e:
-            logger.error(f"Error compiling Word document: {e}")
+            logger.error(
+                f"Error compiling Word document: {e}"
+            )
+
             raise DocxException(
-                "Failed to convert Markdown content to DOCX format.", details=str(e)
+                "Failed to convert Markdown content to DOCX format.",
+                details=str(e),
             ) from e
 
-    def _add_formatted_text(self, paragraph, text: str) -> None:
+    # ==================================================================
+    # DOCUMENT CONFIGURATION
+    # ==================================================================
+
+    def _configure_document(self, doc: Document) -> None:
         """
-        Parses basic inline markdown formatting (**bold** and *italic*)
-        and appends runs to the given paragraph.
+        Configure page size, margins and document properties.
         """
-        # Regex splits on bold and italic tokens
-        tokens = re.split(r"(\*\*.*?\*\*|\*.*?\*)", text)
+
+        section = doc.sections[0]
+
+        section.top_margin = Inches(0.75)
+        section.bottom_margin = Inches(0.75)
+        section.left_margin = Inches(0.85)
+        section.right_margin = Inches(0.85)
+
+        # Document metadata
+        doc.core_properties.title = "Autonomous Business Document"
+        doc.core_properties.subject = (
+            "Generated by Autonomous Business Document Agent"
+        )
+        doc.core_properties.author = "Autonomous Business Document Agent"
+
+    def _configure_styles(self, doc: Document) -> None:
+        """
+        Configure Word styles for consistent professional typography.
+        """
+
+        normal = doc.styles["Normal"]
+
+        normal.font.name = "Calibri"
+        normal.font.size = Pt(10.5)
+
+        normal.paragraph_format.space_after = Pt(7)
+        normal.paragraph_format.line_spacing = 1.08
+
+        # Heading 1
+        heading1 = doc.styles["Heading 1"]
+
+        heading1.font.name = "Calibri"
+        heading1.font.size = Pt(18)
+        heading1.font.bold = True
+
+        heading1.paragraph_format.space_before = Pt(14)
+        heading1.paragraph_format.space_after = Pt(8)
+        heading1.paragraph_format.keep_with_next = True
+
+        # Heading 2
+        heading2 = doc.styles["Heading 2"]
+
+        heading2.font.name = "Calibri"
+        heading2.font.size = Pt(14)
+        heading2.font.bold = True
+
+        heading2.paragraph_format.space_before = Pt(11)
+        heading2.paragraph_format.space_after = Pt(6)
+        heading2.paragraph_format.keep_with_next = True
+
+        # Heading 3
+        heading3 = doc.styles["Heading 3"]
+
+        heading3.font.name = "Calibri"
+        heading3.font.size = Pt(12)
+        heading3.font.bold = True
+
+        heading3.paragraph_format.space_before = Pt(9)
+        heading3.paragraph_format.space_after = Pt(5)
+        heading3.paragraph_format.keep_with_next = True
+
+    def _add_header_footer(self, doc: Document) -> None:
+        """
+        Add a simple footer with page numbers.
+        """
+
+        for section in doc.sections:
+            footer = section.footer
+
+            paragraph = footer.paragraphs[0]
+
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            run = paragraph.add_run("Autonomous Business Document  |  ")
+
+            run.font.size = Pt(8)
+
+            self._add_page_number(paragraph)
+
+    def _add_page_number(self, paragraph) -> None:
+        """
+        Insert a dynamic Word PAGE field.
+        """
+
+        run = paragraph.add_run()
+
+        fld_char_begin = OxmlElement("w:fldChar")
+        fld_char_begin.set(
+            qn("w:fldCharType"),
+            "begin",
+        )
+
+        instr_text = OxmlElement("w:instrText")
+        instr_text.set(
+            qn("xml:space"),
+            "preserve",
+        )
+        instr_text.text = " PAGE "
+
+        fld_char_end = OxmlElement("w:fldChar")
+        fld_char_end.set(
+            qn("w:fldCharType"),
+            "end",
+        )
+
+        run._r.append(fld_char_begin)
+        run._r.append(instr_text)
+        run._r.append(fld_char_end)
+
+        run.font.size = Pt(8)
+
+    # ==================================================================
+    # MARKDOWN PARSER
+    # ==================================================================
+
+    def _parse_markdown(
+        self,
+        doc: Document,
+        markdown_content: str,
+    ) -> None:
+        """
+        Parse Markdown line-by-line and add appropriate Word elements.
+        """
+
+        lines = markdown_content.splitlines()
+
+        i = 0
+
+        while i < len(lines):
+
+            raw_line = lines[i]
+
+            line = raw_line.strip()
+
+            # ----------------------------------------------------------
+            # Empty line
+            # ----------------------------------------------------------
+
+            if not line:
+                i += 1
+                continue
+
+            # ----------------------------------------------------------
+            # Markdown heading
+            # ----------------------------------------------------------
+
+            heading_match = re.match(
+                r"^(#{1,6})\s+(.*)$",
+                line,
+            )
+
+            if heading_match:
+
+                hashes = heading_match.group(1)
+                heading_text = heading_match.group(2).strip()
+
+                heading_level = min(
+                    len(hashes),
+                    3,
+                )
+
+                heading = doc.add_heading(
+                    heading_text,
+                    level=heading_level,
+                )
+
+                heading.paragraph_format.keep_with_next = True
+
+                i += 1
+                continue
+
+            # ----------------------------------------------------------
+            # Markdown table
+            # ----------------------------------------------------------
+
+            if line.startswith("|"):
+
+                table_lines = []
+
+                while (
+                    i < len(lines)
+                    and lines[i].strip().startswith("|")
+                ):
+                    table_lines.append(
+                        lines[i].strip()
+                    )
+                    i += 1
+
+                self._add_table_to_doc(
+                    doc,
+                    table_lines,
+                )
+
+                continue
+
+            # ----------------------------------------------------------
+            # Bullet list
+            # ----------------------------------------------------------
+
+            bullet_match = re.match(
+                r"^[-*+]\s+(.*)$",
+                line,
+            )
+
+            if bullet_match:
+
+                list_text = bullet_match.group(1).strip()
+
+                paragraph = doc.add_paragraph(
+                    style="List Bullet"
+                )
+
+                self._add_formatted_text(
+                    paragraph,
+                    list_text,
+                )
+
+                i += 1
+                continue
+
+            # ----------------------------------------------------------
+            # Numbered list
+            # ----------------------------------------------------------
+
+            number_match = re.match(
+                r"^\d+[.)]\s+(.*)$",
+                line,
+            )
+
+            if number_match:
+
+                list_text = number_match.group(1).strip()
+
+                paragraph = doc.add_paragraph(
+                    style="List Number"
+                )
+
+                self._add_formatted_text(
+                    paragraph,
+                    list_text,
+                )
+
+                i += 1
+                continue
+
+            # ----------------------------------------------------------
+            # Blockquote
+            # ----------------------------------------------------------
+
+            if line.startswith(">"):
+
+                quote_text = line[1:].strip()
+
+                paragraph = doc.add_paragraph()
+
+                paragraph.paragraph_format.left_indent = Inches(
+                    0.3
+                )
+
+                paragraph.paragraph_format.right_indent = Inches(
+                    0.3
+                )
+
+                run = paragraph.add_run(
+                    quote_text
+                )
+
+                run.italic = True
+
+                i += 1
+                continue
+
+            # ----------------------------------------------------------
+            # Horizontal rule
+            # ----------------------------------------------------------
+
+            if re.match(
+                r"^([-*_])\1{2,}$",
+                line,
+            ):
+
+                paragraph = doc.add_paragraph()
+
+                paragraph.paragraph_format.space_after = Pt(5)
+
+                p = paragraph._p
+
+                pPr = p.get_or_add_pPr()
+
+                pBdr = OxmlElement("w:pBdr")
+
+                bottom = OxmlElement(
+                    "w:bottom"
+                )
+
+                bottom.set(
+                    qn("w:val"),
+                    "single",
+                )
+
+                bottom.set(
+                    qn("w:sz"),
+                    "6",
+                )
+
+                bottom.set(
+                    qn("w:space"),
+                    "1",
+                )
+
+                pBdr.append(bottom)
+
+                pPr.append(pBdr)
+
+                i += 1
+                continue
+
+            # ----------------------------------------------------------
+            # Normal paragraph
+            # ----------------------------------------------------------
+
+            paragraph = doc.add_paragraph()
+
+            self._add_formatted_text(
+                paragraph,
+                line,
+            )
+
+            i += 1
+
+    # ==================================================================
+    # INLINE MARKDOWN
+    # ==================================================================
+
+    def _add_formatted_text(
+        self,
+        paragraph,
+        text: str,
+    ) -> None:
+        """
+        Convert basic Markdown inline formatting into Word runs.
+        """
+
+        if not text:
+            return
+
+        # Handles:
+        # **bold**
+        # *italic*
+        # `code`
+        # ***bold italic***
+
+        pattern = re.compile(
+            r"(\*\*\*.*?\*\*\*|\*\*.*?\*\*|\*.*?\*|`.*?`)"
+        )
+
+        tokens = pattern.split(text)
+
         for token in tokens:
+
             if not token:
                 continue
 
-            if token.startswith("**") and token.endswith("**"):
-                run = paragraph.add_run(token[2:-2])
+            # Bold + italic
+            if (
+                token.startswith("***")
+                and token.endswith("***")
+            ):
+                run = paragraph.add_run(
+                    token[3:-3]
+                )
+
                 run.bold = True
-            elif token.startswith("*") and token.endswith("*"):
-                run = paragraph.add_run(token[1:-1])
                 run.italic = True
+
+            # Bold
+            elif (
+                token.startswith("**")
+                and token.endswith("**")
+            ):
+                run = paragraph.add_run(
+                    token[2:-2]
+                )
+
+                run.bold = True
+
+            # Italic
+            elif (
+                token.startswith("*")
+                and token.endswith("*")
+            ):
+                run = paragraph.add_run(
+                    token[1:-1]
+                )
+
+                run.italic = True
+
+            # Inline code
+            elif (
+                token.startswith("`")
+                and token.endswith("`")
+            ):
+                run = paragraph.add_run(
+                    token[1:-1]
+                )
+
+                run.font.name = "Consolas"
+                run.font.size = Pt(9)
+
             else:
                 paragraph.add_run(token)
 
-    def _add_table_to_doc(self, doc: Document, table_lines: list[str]) -> None:
+    # ==================================================================
+    # TABLE GENERATION
+    # ==================================================================
+
+    def _add_table_to_doc(
+        self,
+        doc: Document,
+        table_lines: list[str],
+    ) -> None:
         """
-        Parses raw markdown table lines, cleans delimiters, and constructs
-        a native docx Table styled with borders and bold headers.
+        Convert Markdown table rows into a native Word table.
         """
+
         if len(table_lines) < 2:
-            return  # Needs at least a header row and content/divider row
-
-        # Parse header row
-        header_raw = table_lines[0]
-
-        # Check if the second row is a Markdown divider row (e.g. |---|---|)
-        data_start_idx = 1
-        if len(table_lines) > 1 and re.match(r"^[\s|:-]+$", table_lines[1]):
-            data_start_idx = 2
-
-        # Parser helper for rows split by pipes
-        def parse_row(row_str: str) -> list[str]:
-            cells = [cell.strip() for cell in row_str.split("|")]
-            # Strip empty elements created by outer pipes
-            if row_str.startswith("|") and len(cells) > 0:
-                cells = cells[1:]
-            if row_str.endswith("|") and len(cells) > 0:
-                cells = cells[:-1]
-            return cells
-
-        headers = parse_row(header_raw)
-        num_cols = len(headers)
-        if num_cols == 0:
             return
 
-        # Parse subsequent rows
-        data_rows = []
-        for line in table_lines[data_start_idx:]:
-            row_data = parse_row(line)
-            # Normalize column count (pad or truncate)
-            if len(row_data) < num_cols:
-                row_data += [""] * (num_cols - len(row_data))
-            elif len(row_data) > num_cols:
-                row_data = row_data[:num_cols]
-            data_rows.append(row_data)
+        # --------------------------------------------------------------
+        # Parse row helper
+        # --------------------------------------------------------------
 
-        # Build table structure
-        total_rows = 1 + len(data_rows)
-        table = doc.add_table(rows=total_rows, cols=num_cols)
+        def parse_row(row: str) -> list[str]:
+
+            row = row.strip()
+
+            if row.startswith("|"):
+                row = row[1:]
+
+            if row.endswith("|"):
+                row = row[:-1]
+
+            return [
+                cell.strip()
+                for cell in row.split("|")
+            ]
+
+        headers = parse_row(
+            table_lines[0]
+        )
+
+        if not headers:
+            return
+
+        # --------------------------------------------------------------
+        # Detect separator row
+        # --------------------------------------------------------------
+
+        data_start_idx = 1
+
+        if len(table_lines) > 1:
+
+            separator = parse_row(
+                table_lines[1]
+            )
+
+            is_separator = all(
+                re.match(
+                    r"^:?-{2,}:?$",
+                    cell.strip(),
+                )
+                for cell in separator
+            )
+
+            if is_separator:
+                data_start_idx = 2
+
+        # --------------------------------------------------------------
+        # Parse data
+        # --------------------------------------------------------------
+
+        data_rows: list[list[str]] = []
+
+        for row in table_lines[data_start_idx:]:
+
+            values = parse_row(row)
+
+            if len(values) < len(headers):
+
+                values.extend(
+                    [""] * (
+                        len(headers)
+                        - len(values)
+                    )
+                )
+
+            elif len(values) > len(headers):
+
+                values = values[:len(headers)]
+
+            data_rows.append(values)
+
+        # --------------------------------------------------------------
+        # Create table
+        # --------------------------------------------------------------
+
+        table = doc.add_table(
+            rows=1 + len(data_rows),
+            cols=len(headers),
+        )
+
         table.style = "Table Grid"
 
-        # Populate header cells and style as bold
-        hdr_cells = table.rows[0].cells
-        for col_idx, col_name in enumerate(headers):
-            hdr_cells[col_idx].text = col_name
-            # Apply bold styling to all paragraphs/runs in header cells
-            for paragraph in hdr_cells[col_idx].paragraphs:
-                for run in paragraph.runs:
-                    run.font.bold = True
+        # Prevent rows from breaking unnecessarily.
+        for row in table.rows:
+            row._tr.get_or_add_trPr()
 
-        # Populate data rows
-        for r_idx, r_data in enumerate(data_rows):
-            row_cells = table.rows[r_idx + 1].cells
-            for c_idx, cell_value in enumerate(r_data):
-                # We can add text and check for inline formatting
-                paragraph = row_cells[c_idx].paragraphs[0]
-                self._add_formatted_text(paragraph, cell_value)
+        # --------------------------------------------------------------
+        # Header
+        # --------------------------------------------------------------
+
+        header_cells = table.rows[0].cells
+
+        for index, header in enumerate(headers):
+
+            cell = header_cells[index]
+
+            cell.text = ""
+
+            paragraph = cell.paragraphs[0]
+
+            self._add_formatted_text(
+                paragraph,
+                header,
+            )
+
+            for run in paragraph.runs:
+                run.bold = True
+
+            cell.vertical_alignment = (
+                WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            )
+
+        # --------------------------------------------------------------
+        # Data rows
+        # --------------------------------------------------------------
+
+        for row_index, row_data in enumerate(
+            data_rows,
+            start=1,
+        ):
+
+            cells = table.rows[row_index].cells
+
+            for column_index, value in enumerate(
+                row_data
+            ):
+
+                cell = cells[column_index]
+
+                cell.text = ""
+
+                paragraph = cell.paragraphs[0]
+
+                self._add_formatted_text(
+                    paragraph,
+                    value,
+                )
+
+                cell.vertical_alignment = (
+                    WD_CELL_VERTICAL_ALIGNMENT.CENTER
+                )
+
+        # --------------------------------------------------------------
+        # Spacing after table
+        # --------------------------------------------------------------
+
+        paragraph = doc.add_paragraph()
+
+        paragraph.paragraph_format.space_after = Pt(3)
