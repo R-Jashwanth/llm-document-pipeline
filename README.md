@@ -1,55 +1,63 @@
 # Autonomous Business Document Agent
 
-A production-grade **Autonomous AI Agent** built with Python 3.11+, FastAPI, and a multi-provider LLM backend (Groq primary, Google Gemini fallback). The agent accepts a natural language request, automatically infers the target business document type, formulates an execution plan (checklist), executes each task sequentially (drafting the document section-by-section), performs a self-correcting reflection audit, and compiles a professionally formatted Microsoft Word (`.docx`) file.
+[![License](https://img.shields.io/github/license/R-Jashwanth/llm-document-pipeline)](https://github.com/R-Jashwanth/llm-document-pipeline/blob/main/LICENSE) 
+[![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/fastapi-0.100+-00a393?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Groq](https://img.shields.io/badge/groq-llama--3.3--70b-FF6B35?logo=groq&logoColor=white)](https://console.groq.com/)
+[![Google Gemini](https://img.shields.io/badge/gemini-2.0--flash-4285F4?logo=google&logoColor=white)](https://aistudio.google.com/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Status: Active](https://img.shields.io/badge/status-active-success)](https://github.com/R-Jashwanth/llm-document-pipeline)
+
+A production-grade **Autonomous AI Agent** built with Python 3.11+, FastAPI, and a multi-provider LLM backend (Groq primary, Google Gemini fallback). The agent accepts a natural language request, a[...]
 
 ---
 
 ## Architecture Diagram & Data Flow
 
 ```
-                      +-----------------------------+
-                      |      FastAPI Gateway        |
-                      |          (app.py)           |
-                      +--------------+--------------+
-                                     |
-                                     v
-                      +-----------------------------+
-                      |      Agent Orchestrator     |
-                      |          (agent.py)         |
-                      +-------+--------------+------+
-                              |              ^
-                              v              |
-                      +-------+------+  +----+------+
-                      |Planner Agent |  |Reflection |
-                      | (planner.py) |  | (self-chk)|
-                      +--------------+  +----+------+
-                                             ^
-                                             |
-                      +----------------------+------+
-                      |      Executor Engine        |
-                      |  (utilizes Tool Registry)   |
-                      +--------------+--------------+
-                                     |
-                                     v
-                      +-----------------------------+
-                      | Document Content Generator  |
-                      |   (document_generator.py)   |
-                      +--------------+--------------+
-                                     |
-                                     v
-                      +-----------------------------+
-                      |       DOCX Generator        |
-                      |    (docx_generator.py)      |
-                      +-----------------------------+
+                       +-----------------------------+
+                       |      FastAPI Gateway        |
+                       |          (app.py)           |
+                       +--------------+--------------+
+                                      |
+                                      v
+                       +-----------------------------+
+                       |      Agent Orchestrator     |
+                       |          (agent.py)         |
+                       +-------+--------------+------+
+                               |              ^
+                               v              |
+                       +-------+------+  +----+------+
+                       |Planner Agent |  |Reflection |
+                       | (planner.py) |  | (self-chk)|
+                       +--------------+  +----+------+
+                                              ^
+                                              |
+                       +----------------------+------+
+                       |      Executor Engine        |
+                       |  (utilizes Tool Registry)   |
+                       +--------------+--------------+
+                                      |
+                                      v
+                       +-----------------------------+
+                       | Document Content Generator  |
+                       |   (document_generator.py)   |
+                       +--------------+--------------+
+                                      |
+                                      v
+                       +-----------------------------+
+                       |       DOCX Generator        |
+                       |    (docx_generator.py)      |
+                       +--------------+--------------+
 ```
 
 ### Decoupled Data Flow
 1. **API Entry**: FastAPI (`app.py`) validates incoming request text using Pydantic.
 2. **Orchestration**: The `AutonomousAgent` (`agent.py`) handles state setup and times the pipeline.
 3. **Planning Stage**: `PlannerAgent` (`planner.py`) analyzes the query, determines the document type, lists assumptions, and builds a list of tasks (represented by tool action names).
-4. **Execution Stage**: `Executor` (`executor.py`) looks up each task action inside its extensible **Tool Registry** mapping, invoking the content generator (`document_generator.py`) to write the outline and prose sections contextually.
-5. **Self-Correction (Reflection)**: `ReflectionAgent` (`reflection.py`) reviews the combined draft for quality (grammar, tone, completeness, formatting). If rejected, the LLM rewrites the document before validation completes.
-6. **Word Compilation**: The approved content is passed to `DocxGenerator` (`docx_generator.py`) which translates Markdown headers, bold/italic text, tables, and lists into a native Microsoft Word (`.docx`) file.
+4. **Execution Stage**: `Executor` (`executor.py`) looks up each task action inside its extensible **Tool Registry** mapping, invoking the content generator (`document_generator.py`) to write the [...]
+5. **Self-Correction (Reflection)**: `ReflectionAgent` (`reflection.py`) reviews the combined draft for quality (grammar, tone, completeness, formatting). If rejected, the LLM rewrites the documen[...]
+6. **Word Compilation**: The approved content is passed to `DocxGenerator` (`docx_generator.py`) which translates Markdown headers, bold/italic text, tables, and lists into a native Microsoft Word[...]
 
 ---
 
@@ -125,7 +133,7 @@ agent-assignment/
    ```
 
    > **LLM Provider Notes:**
-   > - `GROQ_API_KEY` is recommended — free tier at [console.groq.com](https://console.groq.com), no billing required, 14,400 req/day. The agent uses `llama-3.3-70b-versatile` for high-quality output.
+   > - `GROQ_API_KEY` is recommended — free tier at [console.groq.com](https://console.groq.com), no billing required, 14,400 req/day. The agent uses `llama-3.3-70b-versatile` for high-quality [...]
    > - `GEMINI_API_KEY` is used as fallback. Get one from [aistudio.google.com](https://aistudio.google.com).
    > - If only Gemini is configured, the agent works Gemini-only.
 
@@ -162,7 +170,7 @@ curl -X POST http://127.0.0.1:8000/agent \
 
 **PowerShell Command:**
 ```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8000/agent -Method Post -Body '{"request": "Create a project proposal for implementing an AI chatbot in a hospital."}' -ContentType "application/json" | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri http://127.0.0.1:8000/agent -Method Post -Body '{"request": "Create a project proposal for implementing an AI chatbot in a hospital."}' -ContentType "application/json" | Co[...]
 ```
 
 **Success Response (200 OK):**
@@ -193,7 +201,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:8000/agent -Method Post -Body '{"request
 ## Technical Interview Preparation Notes
 
 ### 1. Architecture Explanation
-The application is structured to decouple presentation (`app.py`), orchestration (`agent.py`), planning (`planner.py`), stateful run routing (`executor.py`), LLM query interfaces (`llm.py`), and content builders. Each layer communicates via strongly typed Pydantic models (`models.py`). The LLM interaction uses a single wrapper method `generate(prompt, system_prompt, response_format)` to simplify maintenance.
+The application is structured to decouple presentation (`app.py`), orchestration (`agent.py`), planning (`planner.py`), stateful run routing (`executor.py`), LLM query interfaces (`llm.py`), and [...]
 
 ### 2. End-to-End Execution Workflow
 1. Client POSTs a query -> `app.py` validates text length.
@@ -208,18 +216,18 @@ The application is structured to decouple presentation (`app.py`), orchestration
 10. The client receives a detailed response showing executed checklist steps and inferred metadata.
 
 ### 3. Debugging Story: Markdown-Wrapped JSON Outputs & Multi-Provider LLM Resilience
-* **Symptom 1**: During integration testing, the Planner or Reflection agents occasionally crashed with `json.JSONDecodeError` because the LLM returned JSON inside markdown code blocks (e.g. ` ```json { ... } ``` `) instead of a raw JSON string.
-* **Solution**: Developed a clean sanitization helper `_clean_json_markdown()` inside `llm.py` to strip out leading/trailing markdown blocks and whitespaces before parsing. Additionally, configured the Google GenAI client to request strict JSON mime-types (`response_mime_type="application/json"`).
+* **Symptom 1**: During integration testing, the Planner or Reflection agents occasionally crashed with `json.JSONDecodeError` because the LLM returned JSON inside markdown code blocks (e.g. ` ``[...]
+* **Solution**: Developed a clean sanitization helper `_clean_json_markdown()` inside `llm.py` to strip out leading/trailing markdown blocks and whitespaces before parsing. Additionally, configur[...]
 * **Symptom 2**: Free-tier API quota exhaustion on both Gemini and Groq during heavy testing.
-* **Solution**: Implemented a multi-provider LLM client in `llm.py` — Groq (`llama-3.3-70b-versatile`) is the primary provider with automatic fallback to `llama-3.1-8b-instant` (separate quota), then Gemini as final fallback. Each provider's quota errors are detected and handled gracefully without crashing the pipeline.
+* **Solution**: Implemented a multi-provider LLM client in `llm.py` — Groq (`llama-3.3-70b-versatile`) is the primary provider with automatic fallback to `llama-3.1-8b-instant` (separate quota)[...]
 ### 4. Engineering Trade-off: Autonomous Planning vs. Deterministic Workflows
 * **Autonomous Planning**:
-  * *Pros*: Handles open-ended and complex goals; dynamically adapts plan lengths and content headings; classifications adjust according to user intents.
-  * *Cons*: Higher latency; risk of classification drift; validation is harder due to non-deterministic task outputs.
+   * *Pros*: Handles open-ended and complex goals; dynamically adapts plan lengths and content headings; classifications adjust according to user intents.
+   * *Cons*: Higher latency; risk of classification drift; validation is harder due to non-deterministic task outputs.
 * **Deterministic Workflows**:
-  * *Pros*: High reliability; fixed pricing/tokens; simpler validation; execution is highly reproducible.
-  * *Cons*: Rigid structure; unable to adapt if the user submits unique requests or asks for unrelated layouts.
-* *Our Hybrid Approach*: We use **Autonomous Planning** to structure the task list, but enforce a **Deterministic Executor Engine** with strict schema boundaries (`models.py`) and a strict `Tool Registry` whitelist. This allows flexibility in content generation while maintaining predictability in process execution.
+   * *Pros*: High reliability; fixed pricing/tokens; simpler validation; execution is highly reproducible.
+   * *Cons*: Rigid structure; unable to adapt if the user submits unique requests or asks for unrelated layouts.
+* *Our Hybrid Approach*: We use **Autonomous Planning** to structure the task list, but enforce a **Deterministic Executor Engine** with strict schema boundaries (`models.py`) and a strict `Tool [...]
 
 ### 5. Future System Scalability Improvements
 * **Conversation Memory**: Track user revisions (e.g., "Add a compliance section") over multiple API calls.
